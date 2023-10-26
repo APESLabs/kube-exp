@@ -1,19 +1,24 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button, Notification, Table } from "@douyinfe/semi-ui";
 import { IconDelete } from "@douyinfe/semi-icons";
 
-import { NamespaceContext } from "./context";
-import { listJobs, deleteJob } from './kube-api'
+import * as KubeAPI from './kube-api'
 
 
 export default function Job() {
     const [resources, setResources] = useState([] as any[]);
-    const namespace = useContext(NamespaceContext);
 
     const syncResources = async (namespace: string) => {
-        const response = await listJobs(namespace);
+        const response = await KubeAPI.listJob(namespace);
         setResources(response.data.items);   
     }
+
+    const [searchParams, setSearchParams] = useSearchParams();
+    if (searchParams.get('namespace') === null) {
+        setSearchParams({ namespace: 'default' });
+    }
+    const namespace: string = searchParams.get('namespace') as string;
 
     useEffect(() => {
         syncResources(namespace);  
@@ -21,13 +26,13 @@ export default function Job() {
 
     const handleDelete = (namespace: string, name: string) => {
         (async () => {
-            const response = await deleteJob(namespace, name);
+            const response = await KubeAPI.deleteJob(namespace, name);
             Notification.open({
                 type: response.status < 400 ? 'info' : 'error',
                 title: `删除${response.status < 400 ? '成功' : '失败'}`,
                 content: name,
                 duration: 1,
-                onClose: () => syncResources(namespace)
+                onClose: () => window.location.reload()
             });                           
         })()
     }
@@ -46,9 +51,8 @@ export default function Job() {
                 )
             }
         },
-        // {title: '节点', dataIndex: "spec.nodeName"},
         {title: '创建时间', dataIndex: "metadata.creationTimestamp"},
-        // {title: '状态', dataIndex: "status.phase"},
+        {title: '开始时间', dataIndex: "status.startTime"},
         {
             title: '操作',
             render: (text: any, record: any, index: number) => {

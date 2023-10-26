@@ -19,12 +19,12 @@ root.render(
         <BrowserRouter>
             <Routes>
                 <Route path='/' element={<App />}>
-                    <Route index path='/cronjob' element={<CronJob />}></Route>
-                    <Route index path='/daemonset' element={<DaemonSet />}></Route>
-                    <Route index path='/deployment' element={<Deployment />}></Route>
-                    <Route index path='/job' element={<Job />}></Route>
-                    <Route index path='/pod' element={<Pod />}></Route>
-                    <Route index path='/statefulset' element={<StatefulSet />}></Route>
+                    <Route path='/cronjob' element={<CronJob />}></Route>
+                    <Route path='/daemonset' element={<DaemonSet />}></Route>
+                    <Route path='/deployment' element={<Deployment />}></Route>
+                    <Route path='/job' element={<Job />}></Route>
+                    <Route path='/pod' element={<Pod />}></Route>
+                    <Route path='/statefulset' element={<StatefulSet />}></Route>
                 </Route>
             </Routes>
         </BrowserRouter>

@@ -1,10 +1,16 @@
 import { ReactElement, useEffect, useState } from 'react';
-import { Link, Outlet } from 'react-router-dom';
-import { Button, InputGroup, Layout, Nav, Select } from "@douyinfe/semi-ui";
+import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Button, InputGroup, Layout, Modal, Nav, Notification, Select } from "@douyinfe/semi-ui";
 import { IconPlus  } from "@douyinfe/semi-icons";
+import AceEditor from "react-ace";
+import YAML from 'yaml';
 
-import { NamespaceContext } from './context';
-import { listNamespaces } from './kube-api'
+import "ace-builds/src-noconflict/mode-yaml";
+import "ace-builds/src-noconflict/theme-github";
+import "ace-builds/src-noconflict/ext-language_tools";
+
+import * as KubeAPI from './kube-api';
+
 
 const NavItems = [
     {
@@ -35,74 +41,76 @@ const NavItems = [
 
 export default function App() {
     const [namespaces, setNamespaces] = useState([] as any[]);
-    // const [nodes, setNodes] = useState([] as any[]);
-    const [namespace, setNamespace] = useState('default' as any);
-    // const [pods, setPods] = useState([] as any[]);
     const [visible, setVisible] = useState(false);
-    // const [podSpec, setPodSpec] = useState({
-    //     name: '',
-    //     image: '',
-    //     node: ''
-    // })
+    const [kubeObject, setKubeObject] = useState({} as any);
+    const [canSubmit, setCanSubmit] = useState(false);
 
-    // const onOk = () => {
-    //     (async (namespace: string) => {
-    //         const response = await createPod(namespace, {
-    //             apiVersion: 'v1',
-    //             kind: 'Pod',
-    //             metadata: {
-    //                 labels: {
-    //                     app: podSpec.name
-    //                 },
-    //                 name: podSpec.name,
-    //                 namespace: namespace
-    //             },
-    //             spec: {
-    //                 containers: [
-    //                     {
-    //                         name: podSpec.name,
-    //                         image: podSpec.image,
-    //                     }
-    //                 ],
-    //                 nodeName: podSpec.node
-    //             }
-    //         });
-    //         Notification.open({
-    //             type: response.status < 400 ? 'info' : 'error',
-    //             title: `创建${response.status < 400 ? '成功' : '失败'}`,
-    //             content: podSpec.name,
-    //             duration: 1,
-    //             onClose: () => syncPods(namespace)
-    //         });
-    //         setVisible(false);
-    //     })(namespace); 
-    // }
-
-    // const modal = (
-    //     <Modal title="创建Pod" visible={visible} onOk={onOk} onCancel={() => setVisible(false)}>
-    //         <h4>名称</h4>
-    //         <Input placeholder={"example: nginx"} onChange={(value) => setPodSpec({ ...podSpec, name: value })} />
-    //         <h4>镜像</h4>
-    //         <Input placeholder={"example: nginx:stable"} onChange={(value) => setPodSpec({ ...podSpec, image: value })} />
-    //         <h4>节点</h4>
-    //         <Select defaultValue={nodes[0]} onChange={(value) => setPodSpec({ ...podSpec, node: value as string })}>
-    //             {nodes.map((item) => (
-    //                 <Select.Option key={item} value={item}>{item}</Select.Option>
-    //             ))}
-    //         </Select>
-    //     </Modal>
-    // )
+    const navigate = useNavigate();
+    const { pathname } = useLocation();
+    
+    const [searchParams, setSearchParams] = useSearchParams();
+    if (searchParams.get('namespace') === null) {
+        setSearchParams({ namespace: 'default' });
+    }
+    const namespace: string = searchParams.get('namespace') as string;
 
     useEffect(() => {
         (async () => {
-            const response = await listNamespaces();
+            const response = await KubeAPI.listNamespaces();
             setNamespaces(response.data.items.map((item: any) => item.metadata.name));
         })()
-    }, [])
+    }, []);
+
+    const createResourceModalProps = {
+        title: '创建资源',
+        visible: visible,
+        onOk: () => {
+            (async () => {
+                const { group, version, kind } = KubeAPI.buildGVKForURL(kubeObject.apiVersion, kubeObject.kind);
+                kubeObject.metadata.namespace = kubeObject.metadata.namespace || namespace;
+                const response = await KubeAPI.createResource(
+                    group, version, kind,
+                    kubeObject.metadata.namespace, kubeObject
+                );
+                const success = (response !== null && response.status < 400);
+                Notification.open({
+                    type: success ? 'info' : 'error',
+                    title: `创建${success ? '成功' : '失败'}`,
+                    content: success ? kubeObject.metadata.name : '错误请求',
+                    duration: 1,
+                    onClose: () => window.location.reload(),
+                }); 
+            })();
+            setVisible(false);
+        },
+        onCancel: () => setVisible(false),
+        okButtonProps: { disabled: !canSubmit }
+    }
+    const yamlEditorOptions = {
+        name: 'yaml-editor',
+        mode: 'yaml',
+        setOptions: { useWorker: false },
+        onChange: (value: any) => {
+            try {
+                const object = YAML.parse(value, {});
+                setKubeObject(object);
+                setCanSubmit(true);
+            } catch (e) {
+                setCanSubmit(false);
+            }
+        }
+    }
+    
+    const namespaceSelectorProps = {
+        defaultValue: 'default',
+        onChange: (value: any) => {
+            navigate(`${pathname}?namespace=${value as string}`);
+        }
+    }
 
     const navFooter = (
         <InputGroup>
-            <Select defaultValue={'default'} onChange={(value) => { setNamespace(value) }}>
+            <Select {...namespaceSelectorProps}>
                 {namespaces.map((item) => (
                     <Select.Option key={item} value={item}>{item}</Select.Option>
                 ))}
@@ -111,23 +119,24 @@ export default function App() {
         </InputGroup>   
     );
 
-    const renderWrapper = ({ itemElement, props }: { itemElement: ReactElement, props: any }) => {
-        return (<Link to={`${props.itemKey}`}>{itemElement}</Link>);
+    const verticalNavRenderWrapper = ({ itemElement, props }: { itemElement: ReactElement, props: any }) => {
+        return (<Link to={`${props.itemKey}?namespace=${namespace}`}>{itemElement}</Link>);
     };
 
     return (
         <Layout>
             <Layout.Header>
-                <Nav mode={'horizontal'} header={{text: '应用管理平台'}} footer={navFooter} />
+                <Nav mode='horizontal' header={{text: '应用管理平台'}} footer={navFooter} />
             </Layout.Header>
             <Layout>
                 <Layout.Sider>
-                    <Nav items={NavItems} renderWrapper={renderWrapper}/>
+                    <Nav items={NavItems} renderWrapper={verticalNavRenderWrapper} />
                 </Layout.Sider>
                 <Layout.Content>
-                    <NamespaceContext.Provider value={namespace}>
-                        <Outlet />
-                    </NamespaceContext.Provider>
+                    <Modal {...createResourceModalProps}>
+                        <AceEditor {...yamlEditorOptions} />
+                    </Modal>
+                    <Outlet />
                 </Layout.Content>
             </Layout>
         </Layout>
