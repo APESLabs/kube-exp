@@ -3,7 +3,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 module.exports = function (app) {
     app.use(
         createProxyMiddleware("/api", {
-            target: "http://127.0.0.1:8001",
+            target: process.env.REACT_APP_KUBE_APISERVER,
             changeOrigin: true,
             secure: false
         })
